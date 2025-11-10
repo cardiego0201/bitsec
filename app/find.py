@@ -37,6 +37,7 @@ class FileMatch:
     file_path: str
     similarity_score: float
     file_size: int
+    file_content: str
 
 def normalize_code(code: str) -> str:
     """Normalize code by removing whitespace, tabs, carriage returns, and comment lines."""
@@ -127,7 +128,8 @@ def _find_similar_files(snippet_content: str) -> List[FileMatch]:
                 match = FileMatch(
                     file_path=str(file_path),
                     similarity_score=similarity,
-                    file_size=file_size
+                    file_size=file_size,
+                    file_content=file_content,
                 )
                 matches.append(match)
                 
@@ -147,7 +149,7 @@ def _find_similar_files(snippet_content: str) -> List[FileMatch]:
     matches.sort(key=lambda x: x.similarity_score, reverse=True)
     return matches[:max_results]
 
-def find_similar_files(changed_code: str):
+def find_similar_files(changed_code: str) -> Optional[FileMatch]:
     try:
         logger.info("=" * 80)
         logger.info("=" * 80)
@@ -155,15 +157,14 @@ def find_similar_files(changed_code: str):
         logger.info(f"Snippet preview: {changed_code[:100]}...")
         logger.info("Starting to find similar files")
         
-        # Validate required parameters
         if not changed_code:
-            return jsonify({"success": False, "error": "changed_code is required"}), 400
+            logger.warning("changed_code is required")
+            return None
         
         # Record start time
         start_time = time.time()
         
-        # Call the find_similar_files function
-        matches = _find_similar_files(snippet_content=snippet_content)
+        matches = _find_similar_files(snippet_content=changed_code)
         
         # Calculate processing time
         processing_time = time.time() - start_time
@@ -172,23 +173,21 @@ def find_similar_files(changed_code: str):
         
         
         # Convert matches to dictionaries for JSON serialization
-        matches_dict = [match.file_path for match in matches]
-        
+        if not matches:
+            logger.info("No similar files found.")
+            return None
 
-
-        if len(matches_dict) == 0:
-            return jsonify({
-                "success": True,
-                "matches": "",
-            })
-
-        logger.info(f"Returning found file: {matches_dict[0]}")
+        best_match = matches[0]
+        logger.info(
+            "Returning found file: %s (similarity %.3f)",
+            best_match.file_path,
+            best_match.similarity_score,
+        )
         logger.info("=" * 80)
         logger.info("=" * 80)
 
-        # Return results
-        return matches_dict[0]
+        return best_match
         
     except Exception as e:
         logger.error(f"Error in find_similar_files: {e}")
-        return ""
+        return None
